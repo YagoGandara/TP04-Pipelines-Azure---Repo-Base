@@ -1,0 +1,14 @@
+@'
+# Global
+.DS_Store
+# Front
+front/node_modules/
+front/dist/
+# Back
+back/bin/
+back/obj/
+# User files
+*.user
+# Azure DevOps agent work (si usás la misma carpeta por error)
+_work/
+'@ | Out-File -Encoding UTF8 .gitignore

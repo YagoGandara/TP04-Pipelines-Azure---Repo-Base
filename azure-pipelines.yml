@@ -1,0 +1,94 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  name: SelfHosted
+
+variables:
+  buildConfiguration: Release
+  frontDir: front
+  backProj: back/back.csproj
+  artifactsStaging: $(Build.ArtifactStagingDirectory)
+  frontOut: $(Build.SourcesDirectory)/front/dist
+  backPublish: $(Build.SourcesDirectory)/back/bin/Release/publish
+  NUGET_PACKAGES: $(Pipeline.Workspace)/.nuget/packages
+
+stages:
+  - stage: CI 
+    displayName: "CI Mono-Repo (Front + Back)"
+    jobs:
+      - job: Build_Front
+        displayName: "Build Front (Vite + React)"
+        Workspace:
+          clean: all
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: Cache@2
+            displayName: "Cache npm"
+            inputs:
+              key: 'npm | "$(Agent.OS)" | "$(frontDir)/package-lock.json"'
+              restoreKeys: 'npm | "$(Agent.OS)"'
+              path: '$(frontDir)/node_modules'
+
+          - script: |
+              set -e
+              cd "$(frontDir)"
+              npm ci
+              npm run build
+            displayName: "npm ci & build (front)"
+          
+          - task: PublishPipelineArtifact@1
+            displayName: "Publicar artefacto Front (dist)"
+            inputs:
+              targetPath: '$(frontOut)'
+              artifactName: 'front-dist'
+              publishLocation: 'pipeline'
+
+      - job: Build_Back
+        displayName: "Build Back (.NET 8 WebAPI)"
+        dependsOn: Build_Front
+        workspace:
+          clean: all
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: Cache@2
+            displayName: "Cache NuGet"
+            inputs:
+              key: 'nuget | "$(Agent.OS)" | **/*.csproj'
+              restoreKeys: 'nuget | "$(Agent.OS)"'
+              path: '$(NUGET_PACKAGES)'
+
+          - script: |
+              set -e
+              echo "Using NUGET_PACKAGES=$(NUGET_PACKAGES)"
+              dotnet --info
+            displayName: "Info SDK"
+
+          - script: |
+              set -e
+              dotnet restore "$(backProj)"
+            displayName: "dotnet restore"
+
+          - script: |
+              set -e
+              dotnet build "$(backProj)" -c "$(buildConfiguration)" --no-restore
+            displayName: "dotnet build"
+
+          - script: |
+              set -e
+              dotnet publish "$(backProj)" -c "$(buildConfiguration)" -o "$(backPublish)" --no-build
+            displayName: "dotnet publish"
+
+          - task: PublishPipelineArtifact@1
+            displayName: "Publicar artefacto Back (publish)"
+            inputs:
+              targetPath: '$(backPublish)'
+              artifactName: 'back-publish'
+              publishLocation: 'pipeline'
+'@ | Out-File -Encoding UTF8 azure-pipelines.yml
